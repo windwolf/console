@@ -10,9 +10,9 @@ extern "C"
 #include "stdlib.h"
 #include "stdbool.h"
 #include "shared.h"
-#include "../../communication_protocol/inc/tree_accessor.h"
-#include "../../communication_protocol/inc/message_parser.h"
-#include "../../drivers/common/inc/common/stream.h"
+#include "communication_protocol/inc/tree_accessor.h"
+#include "communication_protocol/inc/message_parser.h"
+#include "common/stream.h"
 
 #define CONSOLE_CMD_TEXT_BUFFER_MAX_SIZE 1024
 
@@ -24,21 +24,20 @@ extern "C"
 #define CONSOLE_ERROR_TEXT_VALUE_DISPLAY_ERROR "value display error."
 #define CONSOLE_ERROR_TEXT_VALUE_GET_FAILED "value get failed."
 #define CONSOLE_ERROR_TEXT_VALUE_SET_FAILED "value set failed."
-
     typedef struct Console
     {
-        Stream *dev;
+        Stream *stream;
         TreeAccessor *tree;
         MessageParser *parser;
-        MessageFrame frame;
-        char cmdTextBuffer[CONSOLE_CMD_TEXT_BUFFER_MAX_SIZE];
+        MessageFrame _frame;
+        char _cmdTextBuffer[CONSOLE_CMD_TEXT_BUFFER_MAX_SIZE];
     } Console;
 
-    void console_init(Console *console);
+    void console_create(Console *console, Stream *stream, TreeAccessor *tree, MessageParser *parser);
 
     void console_start(Console *console);
 
-    void console_command_execute(Console* console);
+    void console_command_execute(Console *console);
 
 #ifdef __cplusplus
 }

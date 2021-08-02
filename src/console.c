@@ -9,14 +9,14 @@ static void _console_receive_worker(Console *console);
 static void _console_display_prompt(Console *console)
 {
     char *path = tree_accessor_context_path_get(console->tree);
-    stream_send(console->dev, path, strlen(path));
-    stream_send(console->dev, ">", 1);
+    stream_send(console->stream, path, strlen(path));
+    stream_send(console->stream, ">", 1);
 }
 
 static void _console_display_line(Console *console, char *msg)
 {
-    stream_send(console->dev, msg, strlen(msg));
-    stream_send(console->dev, "\r\n", 2);
+    stream_send(console->stream, msg, strlen(msg));
+    stream_send(console->stream, "\r\n", 2);
 }
 
 static char *_console_next_token(const char *cmdText, char **remain)
@@ -45,10 +45,12 @@ static char *_console_next_token(const char *cmdText, char **remain)
     }
 }
 
-void console_init(Console *console)
+void console_create(Console *console, Stream *stream, TreeAccessor *tree, MessageParser *parser)
 {
+    console->stream = stream;
+    console->tree = tree;
+    console->parser = parser;
 }
-
 void console_command_execute(Console *console)
 {
     TreeAccessor *tree = console->tree;
@@ -56,22 +58,22 @@ void console_command_execute(Console *console)
     OP_RESULT rst;
     while (rst == OP_RESULT_OK)
     {
-        msgResult = message_parser_frame_get(console->parser, NULL, &console->frame);
+        msgResult = message_parser_frame_get(console->parser, NULL, &console->_frame);
         if (msgResult != OP_RESULT_OK)
         {
             continue;
         }
 
-        size_t len = console->frame.contentLength;
+        size_t len = console->_frame.contentLength;
         assert(len < CONSOLE_CMD_TEXT_BUFFER_MAX_SIZE);
 
-        rst = message_parser_frame_content_extract(&console->frame, console->cmdTextBuffer);
+        rst = message_parser_frame_content_extract(&console->_frame, console->_cmdTextBuffer);
         if (rst != OP_RESULT_OK)
         {
             _console_display_line(console, CONSOLE_ERROR_TEXT_COMMAND_PARSE);
         }
 
-        char *cmdText = console->cmdTextBuffer;
+        char *cmdText = console->_cmdTextBuffer;
         cmdText[len] = 0x00;
 
         char *token = _console_next_token(cmdText, &cmdText);
@@ -92,10 +94,10 @@ void console_command_execute(Console *console)
             char **children = tree_accessor_item_list(tree, path);
             while (*children != NULL)
             {
-                stream_send(console->dev, *children, strlen(*children));
-                stream_send(console->dev, '\t', 1);
+                stream_send(console->stream, *children, strlen(*children));
+                stream_send(console->stream, '\t', 1);
             }
-            stream_send(console->dev, "\r\n", 2);
+            stream_send(console->stream, "\r\n", 2);
             _console_display_prompt(console);
         }
         else if (strncasecmp(token, "cd", token))
@@ -161,10 +163,10 @@ void console_command_execute(Console *console)
 
 void console_start(Console *console)
 {
-    stream_server_start(console->dev);
+    stream_server_start(console->stream);
     while (1)
     {
-        stream_receive_ready_wait(console->dev, TX_WAIT_FOREVER);
+        stream_receive_ready_wait(console->stream, TX_WAIT_FOREVER);
         console_command_execute(console);
     }
 }
