@@ -49,129 +49,122 @@ void console_init(Console *console)
 {
 }
 
+void console_command_execute(Console *console)
+{
+    TreeAccessor *tree = console->tree;
+    OP_RESULT msgResult;
+    OP_RESULT rst;
+    while (rst == OP_RESULT_OK)
+    {
+        msgResult = message_parser_frame_get(console->parser, NULL, &console->frame);
+        if (msgResult != OP_RESULT_OK)
+        {
+            continue;
+        }
+
+        size_t len = console->frame.contentLength;
+        assert(len < CONSOLE_CMD_TEXT_BUFFER_MAX_SIZE);
+
+        rst = message_parser_frame_content_extract(&console->frame, console->cmdTextBuffer);
+        if (rst != OP_RESULT_OK)
+        {
+            _console_display_line(console, CONSOLE_ERROR_TEXT_COMMAND_PARSE);
+        }
+
+        char *cmdText = console->cmdTextBuffer;
+        cmdText[len] = 0x00;
+
+        char *token = _console_next_token(cmdText, &cmdText);
+        if (token == NULL)
+        {
+            _console_display_line(console, CONSOLE_ERROR_TEXT_COMMAND_PARSE);
+            continue;
+        }
+
+        if (strncasecmp(token, "li", token))
+        {
+            char *path = _console_next_token(cmdText, &cmdText);
+            if (path == NULL)
+            {
+                _console_display_line(console, CONSOLE_ERROR_TEXT_PATH_ARGUMENT_NEEDED);
+                continue;
+            }
+            char **children = tree_accessor_item_list(tree, path);
+            while (*children != NULL)
+            {
+                stream_send(console->dev, *children, strlen(*children));
+                stream_send(console->dev, '\t', 1);
+            }
+            stream_send(console->dev, "\r\n", 2);
+            _console_display_prompt(console);
+        }
+        else if (strncasecmp(token, "cd", token))
+        {
+            char *path = _console_next_token(cmdText, &cmdText);
+            if (path == NULL)
+            {
+                _console_display_line(console, CONSOLE_ERROR_TEXT_PATH_ARGUMENT_NEEDED);
+                continue;
+            }
+            if (!tree_accessor_context_change(tree, path))
+            {
+                _console_display_line(console, CONSOLE_ERROR_TEXT_CHANGE_CONTEXT_FAILED);
+                continue;
+            }
+            _console_display_prompt(console);
+        }
+        else if (strncasecmp(token, "get", token))
+        {
+            char *path = _console_next_token(cmdText, &cmdText);
+            if (path == NULL)
+            {
+                _console_display_line(console, CONSOLE_ERROR_TEXT_PATH_ARGUMENT_NEEDED);
+                continue;
+            }
+            char *value;
+            if (tree_accessor_value_get(console, path, &value))
+            {
+                _console_display_line(console, CONSOLE_ERROR_TEXT_VALUE_DISPLAY_ERROR);
+                continue;
+            }
+            _console_display_line(console, value);
+            _console_display_prompt(console);
+        }
+        else if (strncasecmp(token, "set", token))
+        {
+            char *path = _console_next_token(cmdText, &cmdText);
+            if (path == NULL)
+            {
+                _console_display_line(console, CONSOLE_ERROR_TEXT_PATH_ARGUMENT_NEEDED);
+                continue;
+            }
+            char *value = _console_next_token(cmdText, &cmdText);
+            if (value == NULL)
+            {
+                _console_display_line(console, CONSOLE_ERROR_TEXT_VALUE_SET_FAILED);
+                continue;
+            }
+            if (tree_accessor_value_set(console, path, value))
+            {
+                _console_display_line(console, CONSOLE_ERROR_TEXT_VALUE_DISPLAY_ERROR);
+                continue;
+            }
+            _console_display_prompt(console);
+        }
+        else
+        {
+            _console_display_line(console, CONSOLE_ERROR_TEXT_COMMAND_NOT_RECOGNIZE);
+            continue;
+        }
+    }
+};
+
 void console_start(Console *console)
 {
     stream_server_start(console->dev);
     while (1)
     {
         stream_receive_ready_wait(console->dev, TX_WAIT_FOREVER);
-        TreeAccessor *tree = console->tree;
-        OP_RESULT rst;
-        while (rst != OP_RESULT_CONTENT_NOT_ENOUGH)
-        {
-
-            rst = message_parser_frame_get(console->parser, NULL, &console->frame);
-            if (rst != OP_RESULT_OK)
-            {
-                continue;
-            }
-
-            size_t len = console->frame.contentLength;
-            assert(len < CONSOLE_CMD_TEXT_BUFFER_MAX_SIZE);
-
-            rst = message_parser_frame_content_extract(&console->frame, console->cmdTextBuffer);
-            if (rst != OP_RESULT_OK)
-            {
-                _console_display_line(console, CONSOLE_ERROR_TEXT_COMMAND_PARSE);
-                rst = OP_RESULT_GENERAL_ERROR;
-                continue;
-            }
-
-            char *cmdText = console->cmdTextBuffer;
-            cmdText[len] = 0x00;
-
-            char *token = _console_next_token(cmdText, &cmdText);
-            if (token == NULL)
-            {
-                _console_display_line(console, CONSOLE_ERROR_TEXT_COMMAND_PARSE);
-                rst = OP_RESULT_GENERAL_ERROR;
-                continue;
-            }
-
-            if (strncasecmp(token, "li", token))
-            {
-                char *path = _console_next_token(cmdText, &cmdText);
-                if (path == NULL)
-                {
-                    _console_display_line(console, CONSOLE_ERROR_TEXT_PATH_ARGUMENT_NEEDED);
-                    rst = OP_RESULT_GENERAL_ERROR;
-                    continue;
-                }
-                char **children = tree_accessor_item_list(tree, path);
-                while (*children != NULL)
-                {
-                    stream_send(console->dev, *children, strlen(*children));
-                    stream_send(console->dev, '\t', 1);
-                }
-                stream_send(console->dev, "\r\n", 2);
-                _console_display_prompt(console);
-            }
-            else if (strncasecmp(token, "cd", token))
-            {
-                char *path = _console_next_token(cmdText, &cmdText);
-                if (path == NULL)
-                {
-                    _console_display_line(console, CONSOLE_ERROR_TEXT_PATH_ARGUMENT_NEEDED);
-                    rst = OP_RESULT_GENERAL_ERROR;
-                    continue;
-                }
-                if (!tree_accessor_context_change(tree, path))
-                {
-                    _console_display_line(console, CONSOLE_ERROR_TEXT_CHANGE_CONTEXT_FAILED);
-                    rst = OP_RESULT_GENERAL_ERROR;
-                    continue;
-                }
-                _console_display_prompt(console);
-            }
-            else if (strncasecmp(token, "get", token))
-            {
-                char *path = _console_next_token(cmdText, &cmdText);
-                if (path == NULL)
-                {
-                    _console_display_line(console, CONSOLE_ERROR_TEXT_PATH_ARGUMENT_NEEDED);
-                    rst = OP_RESULT_GENERAL_ERROR;
-                    continue;
-                }
-                char *value;
-                if (tree_accessor_value_get(console, path, &value))
-                {
-                    _console_display_line(console, CONSOLE_ERROR_TEXT_VALUE_DISPLAY_ERROR);
-                    rst = OP_RESULT_GENERAL_ERROR;
-                    continue;
-                }
-                _console_display_line(console, value);
-                _console_display_prompt(console);
-            }
-            else if (strncasecmp(token, "set", token))
-            {
-                char *path = _console_next_token(cmdText, &cmdText);
-                if (path == NULL)
-                {
-                    _console_display_line(console, CONSOLE_ERROR_TEXT_PATH_ARGUMENT_NEEDED);
-                    rst = OP_RESULT_GENERAL_ERROR;
-                    continue;
-                }
-                char *value = _console_next_token(cmdText, &cmdText);
-                if (value == NULL)
-                {
-                    _console_display_line(console, CONSOLE_ERROR_TEXT_VALUE_SET_FAILED);
-                    rst = OP_RESULT_GENERAL_ERROR;
-                    continue;
-                }
-                if (tree_accessor_value_set(console, path, value))
-                {
-                    _console_display_line(console, CONSOLE_ERROR_TEXT_VALUE_DISPLAY_ERROR);
-                    rst = OP_RESULT_GENERAL_ERROR;
-                    continue;
-                }
-                _console_display_prompt(console);
-            }
-            else
-            {
-                _console_display_line(console, CONSOLE_ERROR_TEXT_COMMAND_NOT_RECOGNIZE);
-                rst = OP_RESULT_GENERAL_ERROR;
-                continue;
-            }
-        }
+        console_command_execute(console);
     }
 }

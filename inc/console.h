@@ -38,6 +38,8 @@ extern "C"
 
     void console_start(Console *console);
 
+    void console_command_execute(Console* console);
+
 #ifdef __cplusplus
 }
 #endif
