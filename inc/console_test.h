@@ -5,9 +5,10 @@
 extern "C"
 {
 #endif
-
+#ifdef UNITTEST
     void console_test();
 
+#endif //UNITTEST
 #ifdef __cplusplus
 }
 #endif
